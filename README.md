@@ -123,4 +123,4 @@ type ISTService interface {
 
 你会发现`OnGroupMsg()`和`OnPrivateMsg()`基本符合CoolQ-Golang-SDK中`cqp.GroupMsg`和`cqp.PrivateMsg`的类型。`ISTService`添加了`post`参数，用以标记服务是否作为后置服务被触发。
 
-**注意：**作为后置服务被触发时，`msg`将被替换成服务的输出，`post`置为`true`，其余的参数会保持不变！
+<b>注意：</b>作为后置服务被触发时，`msg`将被替换成服务的输出，`post`置为`true`，其余的参数会保持不变！
