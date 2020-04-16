@@ -7,10 +7,12 @@ import (
 // ISTService 服务接口
 // 为使得一个结构体成为服务，其应当具备初始化、处理私聊和群聊消息的能力
 type ISTService interface {
-	// OnGroupMsg 收到群聊消息时触发
-	OnGroupMsg(subType, msgID int32, fromGroup, fromQQ int64, fromAnonymous, msg string, font int32) string
-	// OnPrivateMsg 收到私聊消息时触发
-	OnPrivateMsg(subType, msgID int32, fromQQ int64, msg string, font int32) string
+	// OnGroupMsg 收到群聊消息时触发，返回服务的输出和是否向下传递消息
+	// post表示其是否作为后置服务被触发
+	OnGroupMsg(subType, msgID int32, fromGroup, fromQQ int64, fromAnonymous, msg string, font int32, post bool) (string, bool)
+	// OnPrivateMsg 收到私聊消息时触发，返回服务的输出和是否向下传递消息
+	// post表示其是否作为后置服务被触发
+	OnPrivateMsg(subType, msgID int32, fromQQ int64, msg string, font int32, post bool) (string, bool)
 	// 注册服务时触发
 	Init()
 }
@@ -21,7 +23,6 @@ type stService struct {
 	service          ISTService // 服务实例
 	priority         int        // 服务优先级，应该是一个大于等于0的数字
 	postServiceNames []string   // 后置服务名，获得的输入是该服务的输出
-	transparent      bool       // 原始信息是否向优先级更低的服务传递，默认为true
 }
 
 // Controller 服务控制器
@@ -31,13 +32,12 @@ type Controller struct {
 }
 
 // NewService 创建一个服务
-func NewService(name string, service ISTService, priority int, transparent bool) *stService {
+func NewService(name string, service ISTService, priority int) *stService {
 	return &stService{
 		name:             name,
 		service:          service,
 		priority:         priority,
 		postServiceNames: nil,
-		transparent:      transparent,
 	}
 }
 
@@ -104,12 +104,12 @@ func (c *Controller) OnGroupMsg(subType, msgID int32, fromGroup, fromQQ int64, f
 			if !exist {
 				continue
 			}
+			// 将原始消息交由服务处理，获取服务的输出
+			serviceReply, serviceTransparent := service.service.OnGroupMsg(subType, msgID, fromGroup, fromQQ, fromAnonymous, msg, font, false)
 			// 一旦当前优先级的服务中有一个服务允许向下传递，原始消息就会向下传递
-			if !transparent && service.transparent {
+			if !transparent && serviceTransparent {
 				transparent = true
 			}
-			// 将原始消息交由服务处理，获取服务的输出
-			serviceReply := service.service.OnGroupMsg(subType, msgID, fromGroup, fromQQ, fromAnonymous, msg, font)
 			// 如果服务返回不为空，将服务的输出送入后置服务
 			if serviceReply != "" {
 				// 遍历后置服务名
@@ -121,7 +121,7 @@ func (c *Controller) OnGroupMsg(subType, msgID int32, fromGroup, fromQQ int64, f
 						continue
 					}
 					// 将服务输出交由后置服务处理，丢弃后置服务的输出
-					postService.service.OnGroupMsg(subType, msgID, fromGroup, fromQQ, fromAnonymous, serviceReply, font)
+					postService.service.OnGroupMsg(subType, msgID, fromGroup, fromQQ, fromAnonymous, serviceReply, font, true)
 				}
 			}
 		}
@@ -164,12 +164,12 @@ func (c *Controller) OnPrivateMsg(subType, msgID int32, fromQQ int64, msg string
 			if !exist {
 				continue
 			}
+			// 将原始消息交由服务处理，获取服务的输出
+			serviceReply, serviceTransparent := service.service.OnPrivateMsg(subType, msgID, fromQQ, msg, font, false)
 			// 一旦当前优先级的服务中有一个服务允许向下传递，原始消息就会向下传递
-			if !transparent && service.transparent {
+			if !transparent && serviceTransparent {
 				transparent = true
 			}
-			// 将原始消息交由服务处理，获取服务的输出
-			serviceReply := service.service.OnPrivateMsg(subType, msgID, fromQQ, msg, font)
 			// 如果服务返回不为空，将服务的输出送入后置服务
 			if serviceReply != "" {
 				// 遍历后置服务名
@@ -181,7 +181,7 @@ func (c *Controller) OnPrivateMsg(subType, msgID int32, fromQQ int64, msg string
 						continue
 					}
 					// 将服务输出交由后置服务处理，丢弃后置服务的输出
-					postService.service.OnPrivateMsg(subType, msgID, fromQQ, serviceReply, font)
+					postService.service.OnPrivateMsg(subType, msgID, fromQQ, serviceReply, font, true)
 				}
 			}
 		}
